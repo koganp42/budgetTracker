@@ -1,20 +1,77 @@
 let transactions = [];
 let myChart;
 
-fetch("/api/transaction")
-  .then(response => {
-    return response.json();
-  })
-  .then(data => {
-    // save db data on global variable
-    transactions = data;
+let db;
+const request = window.indexedDB.open;
+window.addEventListener("online", checkDb);
 
-    populateTotal();
-    populateTable();
-    populateChart();
-  });
+const saveRecord = record => {
+  const transaction = db.transaction(["pending"], "readwrite");
+  const pendingStore = transaction.objectStore("pending"); 
+  pendingStore.add(record); 
+}
 
-function populateTotal() {
+const checkDb = () => {
+  const transaction = db.transaction(["pending"], "readwrite");
+  const pendingStore = transaction.objectStore("pending"); 
+  
+  const getAllRecords = pendingStore.getAll();
+  getAllRecords.onsuccess = () => {
+    if(getAllRecords.result.length > 0){
+      fetch("/api/transaction/bulk", {
+        method: "POST",
+        body: JSON.stringify(getAll.result),
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          "Content-Type": "application/json"
+        }
+      }).then(response => response.json()
+      ).then(() => {
+        const transaction = db.transaction(["pending"], "readwrite");
+        const pendingStore = transaction.objectStore("pending"); 
+        pendingStore.clear();
+        getTransactions();
+        console.log("Finished updating transactions")
+      })
+    }
+  }
+}
+
+request.onupgradeneeded = e => {
+  db = e.target.result;
+  const pendingStore = db.createObjectStore("pending", {autoIncrement: true});
+  console.log(pendingStore);
+}
+
+request.onsuccess = e => {
+  db = request.result;
+  if(navigator.onLine === true){
+    checkDb();
+  }
+}
+
+request.onerror = e => {
+  console.log(e.target.errorCode);
+}
+
+const getTransactions = () => {
+  fetch("/api/transaction")
+    .then(response => {
+      return response.json();
+    })
+    .then(data => {
+      // save db data on global variable
+      transactions = data;
+  
+      populateTotal();
+      populateTable();
+      populateChart();
+    });
+
+}
+getTransactions();
+
+const populateTotal = () => {
   // reduce transaction amounts to a single total value
   let total = transactions.reduce((total, t) => {
     return total + parseInt(t.value);
@@ -24,7 +81,7 @@ function populateTotal() {
   totalEl.textContent = total;
 }
 
-function populateTable() {
+const populateTable = () => {
   let tbody = document.querySelector("#tbody");
   tbody.innerHTML = "";
 
@@ -40,7 +97,7 @@ function populateTable() {
   });
 }
 
-function populateChart() {
+const populateChart = () => {
   // copy array and reverse it
   let reversed = transactions.slice().reverse();
   let sum = 0;
@@ -78,7 +135,7 @@ function populateChart() {
   });
 }
 
-function sendTransaction(isAdding) {
+const sendTransaction = isAdding => {
   let nameEl = document.querySelector("#t-name");
   let amountEl = document.querySelector("#t-amount");
   let errorEl = document.querySelector(".form .error");
